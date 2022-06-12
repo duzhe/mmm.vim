@@ -4,7 +4,7 @@
 " Author:      Du Zhe <duzhe0211@gmail.com>
 " Licence:     Vim licence
 " Website:     https://github.com/duzhe/mmm.vim
-" Version:     1.1
+" Version:     1.2
 " Note:        See the code before using it.
 " ============================================================================
 
@@ -21,14 +21,14 @@ endif
 if !exists('g:mmm_map_keys')
   let g:mmm_map_keys = 1
 endif
-if !exists('s:mmm_tagbar_width')
-    let s:mmm_tagbar_width = 32
+if !exists('g:mmm_tagbar_width')
+    let g:mmm_tagbar_width = 32
 endif
 if !exists('g:mmm_debug')
     let g:mmm_debug = 0
 endif
 if !exists('g:mmm_debug_logfile')
-    let g:mmm_debug_logfile = "/tmp/mmm_debug.log"
+    let g:mmm_debug_logfile = '/tmp/mmm_debug.log'
 endif
 
 " layout
@@ -46,17 +46,17 @@ endif
 " S1, S2, S3 for secondary window
 " T for tagbar window(if exists)
 
-" window id list, in reverse order. for the layout above, the s:mmm_winids
+" window id list, in reverse order. for the layout above, the t:mmm_winids
 " should be [S3, S2, S1, M]
-let s:mmm_winids = []
+let t:mmm_winids = []
 " window id of tagbar window
-let s:mmm_tagbar_wid = -1
+let t:mmm_tagbar_wid = -1
 
 
 " reorder all the window
 function! mmm#reorder()
-    call mmm#log("reorder: winids:" .. join(s:mmm_winids, ", "))
-    if len(s:mmm_winids) <=1
+    call mmm#log('reorder: winids:' .. join(t:mmm_winids, ', '))
+    if len(t:mmm_winids) <=1
         return
     endif
     call mmm#stack()
@@ -66,76 +66,79 @@ endfunction
 
 " make all window arrangement vertically (except tagbar window)
 function! mmm#stack()
-    call mmm#log("stack: winids:" .. join(s:mmm_winids, ", "))
-    if len(s:mmm_winids) < 2
+    call mmm#log('stack: winids:' .. join(t:mmm_winids, ', '))
+    if len(t:mmm_winids) < 2
         return
     endif
-    for l:wid in s:mmm_winids[:-2]
+    for l:wid in t:mmm_winids[:-2]
         call mmm#goto(l:wid)
         wincmd K
-        call mmm#log("stack: wincmd K, " .. l:wid)
+        call mmm#log('stack: wincmd K, ' .. l:wid)
     endfor
 endfunction
 
 
 " make master window left
 function! mmm#master()
-    call mmm#log("master: winids:" .. join(s:mmm_winids, ", "))
-    if len(s:mmm_winids) == 0
+    call mmm#log('master: winids:' .. join(t:mmm_winids, ', '))
+    if len(t:mmm_winids) == 0
         return
     endif
-    let l:wid = s:mmm_winids[-1]
+    let l:wid = t:mmm_winids[-1]
     call mmm#goto(l:wid)
     wincmd H
-    call mmm#log("master: wincmd H, " .. l:wid)
+    call mmm#log('master: wincmd H, ' .. l:wid)
 endfunction
 
 
 " make tagbar window right (if exists)
 function! mmm#tagbar()
-    call mmm#log("tagbar: " .. s:mmm_tagbar_wid)
-    if s:mmm_tagbar_wid == -1
+    call mmm#log('tagbar: ' .. t:mmm_tagbar_wid)
+    if t:mmm_tagbar_wid == -1
         return
     endif
     let l:cwid = win_getid()
-    call mmm#goto(s:mmm_tagbar_wid)
-    let l:cmd = s:mmm_tagbar_width .. "wincmd L"
+    call mmm#goto(t:mmm_tagbar_wid)
+    let l:cmd = g:mmm_tagbar_width .. 'wincmd L'
     exec l:cmd
-    call mmm#log("tagbar: " .. l:cmd .. ", ".. s:mmm_tagbar_wid)
+    call mmm#log('tagbar: ' .. l:cmd .. ', '.. t:mmm_tagbar_wid)
     call mmm#goto(l:cwid)
 endfunction
 
 
 function! mmm#id_append(wid)
-    if a:wid == s:mmm_tagbar_wid
+    if a:wid == t:mmm_tagbar_wid
         return
     endif
     call mmm#id_remove(a:wid)
-    call add(s:mmm_winids, a:wid)
+    call add(t:mmm_winids, a:wid)
 endfunction
 
 
 function! mmm#id_remove(wid)
-  let l:idx = index(s:mmm_winids, a:wid)
+  let l:idx = index(t:mmm_winids, a:wid)
   if (l:idx != -1)
-      call remove(s:mmm_winids, l:idx)
+      call remove(t:mmm_winids, l:idx)
   endif
 endfunction
 
 
 function! mmm#e_winnew()
-    call mmm#log("e_winnew "..win_getid())
+    if !exists('t:mmm_winids')
+        call mmm#e_tabnew()
+    endif
+    call mmm#log('e_winnew '..win_getid())
     call mmm#id_append(win_getid())
 endfunction
 
 
 function! mmm#e_bufwinenter()
-    call mmm#log("e_bufwinenter")
-    if bufname()[0:10] == "__Tagbar__."
+    call mmm#log('e_bufwinenter')
+    if bufname()[0:10] == '__Tagbar__.'
         let l:wid = win_getid()
-        let s:mmm_tagbar_wid = l:wid
+        let t:mmm_tagbar_wid = l:wid
         call mmm#id_remove(l:wid)
-        call mmm#log("bufwinenter tagbar yes")
+        call mmm#log('bufwinenter tagbar yes')
         return
     endif
     call mmm#reorder()
@@ -143,24 +146,31 @@ endfunction
 
 
 function! mmm#e_bufwinleave()
-    call mmm#log("e_bufwinleave")
-    if bufname()[0:10] == "__Tagbar__."
+    call mmm#log('e_bufwinleave')
+    if bufname()[0:10] == '__Tagbar__.'
         let l:wid = win_getid()
-        let s:mmm_tagbar_wid = -1
+        let t:mmm_tagbar_wid = -1
         call mmm#id_append(l:wid)
-        call mmm#log("bufwinleave tagbar yes")
+        call mmm#log('bufwinleave tagbar yes')
     endif
 endfunction
 
 
 function! mmm#e_winclosed()
-    call mmm#log("e_bufwinleave " .. win_getid())
+    call mmm#log('e_bufwinleave ' .. win_getid())
     call mmm#id_remove(win_getid())
 endfunction
 
 
+function! mmm#e_tabnew()
+    call mmm#log('e_tabnew')
+    let t:mmm_winids = []
+    let t:mmm_tagbar_wid = -1
+endfunction
+
+
 function! mmm#close()
-    call mmm#log("winclose")
+    call mmm#log('winclose')
     close
     call mmm#reorder()
 endfunction
@@ -182,8 +192,8 @@ endfunction
 
 " new main window
 function! mmm#new()
-    let l:cmd = "vert topleft new"
-    call mmm#log("new cmd:"..l:cmd)
+    let l:cmd = 'vert topleft new'
+    call mmm#log('new cmd:'..l:cmd)
     exec l:cmd
 endfunction
 
@@ -191,16 +201,16 @@ endfunction
 " new window with same buffer
 function! mmm#split()
     let l:bufnr = bufnr()
-    let l:cmd = "vert topleft new"
-    call mmm#log("new cmd:"..l:cmd)
+    let l:cmd = 'vert topleft new'
+    call mmm#log('new cmd:'..l:cmd)
     exec l:cmd
-    exec "buf " .. l:bufnr
+    exec 'buf ' .. l:bufnr
 endfunction
 
 
 " make current window as the main window
 function! mmm#focus()
-    call mmm#log("focus")
+    call mmm#log('focus')
     call mmm#id_append(win_getid())
     call mmm#reorder()
 endfunction
@@ -208,7 +218,7 @@ endfunction
 
 function! mmm#log(msg)
    if g:mmm_debug
-       execute "redir >> " .. g:mmm_debug_logfile
+       execute 'redir >> ' .. g:mmm_debug_logfile
        silent echon strftime('%Y-%m-%d %H:%M:%S') . ': ' . a:msg . "\n"
        redir END
    endif
@@ -222,6 +232,7 @@ augroup mmm
     au WinClosed   * call mmm#e_winclosed()
     au BufWinEnter * call mmm#e_bufwinenter()
     au BufWinLeave * call mmm#e_bufwinleave()
+    "au TabNew      * call mmm#e_tabnew()  " not works
 augroup end
 
 
