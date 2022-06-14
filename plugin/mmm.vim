@@ -30,24 +30,43 @@ endif
 if !exists('g:mmm_debug_logfile')
     let g:mmm_debug_logfile = '/tmp/mmm_debug.log'
 endif
+if !exists('g:mmm_main_width_min')
+    let g:mmm_main_width_min = 84
+endif
 
-" layout
-" +----------+-----------+-+
-" |          |           | |
-" |          |    S1     | |
-" |          +-----------+ |
-" |          |           | |
-" |    M     |    S2     |T|
-" |          +-----------+ |
-" |          |           | |
-" |          |    S3     | |
-" |----------+-----------+-|
+
+
+" layout 1 (three columns)
+" +-----------+-----------+-------------+---+
+" |           |           |             |   |
+" |           |           |      S1     |   |
+" |           |           |             |   |
+" |           |           +-------------+   |
+" |           |           |             |   |
+" |     M1    |     M2    |      S2     | T |
+" |           |           |             |   |
+" |           |           +-------------+   |
+" |           |           |             |   |
+" |           |           |      S3     |   |
+" |           |           |             |   |
+" |-----------+-----------+-------------+---|
+" layout 2 (two columns for smaller screen)
+" +-----------+-----------+-+
+" |           |           | |
+" |           |    S1     | |
+" |           +-----------+ |
+" |           |           | |
+" |     M     |    S2     |T|
+" |           +-----------+ |
+" |           |           | |
+" |           |    S3     | |
+" |-----------+-----------+-|
 " M for main window
-" S1, S2, S3 for secondary window
+" S for secondary window
 " T for tagbar window(if exists)
 
-" window id list, in reverse order. for the layout above, the t:mmm_winids
-" should be [S3, S2, S1, M]
+" window id list, in reverse order. for the layout 1 above, the t:mmm_winids
+" should be [S3, S2, S1, M2, M1]
 let t:mmm_winids = []
 " window id of tagbar window
 let t:mmm_tagbar_wid = -1
@@ -59,21 +78,53 @@ function! mmm#reorder()
     if len(t:mmm_winids) <=1
         return
     endif
+    call mmm#win_width_caculate()
     call mmm#stack()
-    call mmm#master()
     call mmm#tagbar()
+    call mmm#master()
 endfunction
+
+
+function! mmm#win_width_caculate()
+    let l:w = t:mmm_tagbar_wid == -1 ? &columns : &columns - g:mmm_tagbar_width -1
+    if (&columns >= g:mmm_main_width_min *3 + g:mmm_tagbar_width + 3)
+        let s:win_columns = 3
+        let s:main_width = float2nr(ceil((l:w-2)/3))
+        let s:main2_width = float2nr(floor((l:w-2)/3))
+    elseif (&columns >= g:mmm_main_width_min *2.5 + g:mmm_tagbar_width + 3)
+        let s:win_columns = 3
+        let s:main_width = g:mmm_main_width_min
+        let s:main2_width = g:mmm_main_width_min
+    elseif (&columns >= g:mmm_main_width_min *2 + g:mmm_tagbar_width + 2)
+        let s:win_columns = 2
+        let s:main_width = float2nr(ceil((l:w-1)/2))
+    elseif (&columns >= g:mmm_main_width_min *1.5 + g:mmm_tagbar_width + 2)
+        let s:win_columns = 2
+        let s:main_width = g:mmm_main_width_min
+    else
+        let s:win_columns = 2
+        let s:main_width = float2nr(ceil((l:w-1)/2))
+    endif
+    if (s:win_columns == 3 && len(t:mmm_winids) <=2) 
+        let s:main_width = float2nr(ceil((l:w-1)/2))
+        let s:main2_width = float2nr(floor((l:w-1)/2))
+    endif
+    call mmm#log('win_width: ' .. s:win_columns .. ', ' .. s:main_width)
+endfunction
+
 
 " make all window arrangement vertically (except tagbar window)
 function! mmm#stack()
     call mmm#log('stack: winids:' .. join(t:mmm_winids, ', '))
-    if len(t:mmm_winids) < 2
+    if len(t:mmm_winids) < s:win_columns
         return
     endif
-    for l:wid in t:mmm_winids[:-2]
+    let l:w = s:win_columns == 3 ? t:mmm_winids[:-3] : t:mmm_winids[:-2]
+    for l:wid in l:w
         call mmm#goto(l:wid)
-        wincmd K
-        call mmm#log('stack: wincmd K, ' .. l:wid)
+        let l:cmd = 'set nowinfixwidth | wincmd K'
+        exec l:cmd
+        call mmm#log('stack: {' .. l:cmd .. '}, ' .. l:wid)
     endfor
 endfunction
 
@@ -84,10 +135,18 @@ function! mmm#master()
     if len(t:mmm_winids) == 0
         return
     endif
+    if s:win_columns == 3
+        let l:wid = t:mmm_winids[-2] 
+        call mmm#goto(l:wid)
+        let l:cmd = 'wincmd H | set winfixwidth | vertical resize ' ..  s:main2_width
+        exec l:cmd
+        call mmm#log('master: {' .. l:cmd .. '}, wid:' .. l:wid)
+    end
     let l:wid = t:mmm_winids[-1]
     call mmm#goto(l:wid)
-    wincmd H
-    call mmm#log('master: wincmd H, ' .. l:wid)
+    let l:cmd = 'wincmd H | set winfixwidth | vertical resize ' ..  s:main_width
+    exec l:cmd
+    call mmm#log('master: {' .. l:cmd .. '}, wid:' .. l:wid)
 endfunction
 
 
@@ -141,6 +200,9 @@ function! mmm#e_bufwinenter()
         call mmm#log('bufwinenter tagbar yes')
         return
     endif
+    if bufname() =~ 'BufExplorer'
+        return
+    endif
     call mmm#reorder()
 endfunction
 
@@ -166,6 +228,13 @@ function! mmm#e_tabnew()
     call mmm#log('e_tabnew')
     let t:mmm_winids = []
     let t:mmm_tagbar_wid = -1
+endfunction
+
+
+function! mmm#e_vimresized()
+    call mmm#log('e_vimresized:' .. &columns)
+    "call mmm#win_width_caculate()
+    call mmm#reorder()
 endfunction
 
 
@@ -233,6 +302,7 @@ augroup mmm
     au BufWinEnter * call mmm#e_bufwinenter()
     au BufWinLeave * call mmm#e_bufwinleave()
     "au TabNew      * call mmm#e_tabnew()  " not works
+    au VimResized  * call mmm#e_vimresized()
 augroup end
 
 
